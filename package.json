@@ -1,0 +1,30 @@
+{
+  "name": "webdav-file-manager-extension",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Microsoft Edge 扩展：读取 WebDAV 原始报文并渲染成可操作的文件管理网页，内置音频播放器（封面 / ReplayGain）与 Web MIDI 支持",
+  "scripts": {
+    "icons": "node tools/make-icons.mjs",
+    "server": "node tools/webdav-server.mjs --port 8899 --root .tmp/davroot --auth basic --user demo --pass demo --samples .",
+    "server:anonymous": "node tools/webdav-server.mjs --port 8899 --root .tmp/davroot --auth none",
+    "server:digest": "node tools/webdav-server.mjs --port 8899 --root .tmp/davroot --auth digest --user demo --pass demo",
+    "test": "npm run test:unit && npm run test:e2e",
+    "test:unit": "node --test test/unit.test.mjs test/media.test.mjs test/blob-fetch.test.mjs",
+    "test:e2e": "node test/e2e.mjs",
+    "check": "node tools/check.mjs",
+    "vendor": "node tools/vendor-webaudiokit.mjs",
+    "test:media": "node --test test/media.test.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "webdav",
+    "edge-extension",
+    "manifest-v3",
+    "propfind",
+    "file-manager"
+  ],
+  "license": "MIT"
+}

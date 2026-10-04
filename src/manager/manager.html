@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>WebDAV 文件管理器</title>
+    <link rel="stylesheet" href="manager.css" />
+    <link rel="stylesheet" href="player.css" />
+  </head>
+  <body>
+    <header class="appbar">
+      <div class="brand">
+        <span class="brand-icon">🗄️</span>
+        <span class="brand-text">WebDAV 文件管理器</span>
+      </div>
+
+      <form id="connect-form" class="connect-form" autocomplete="off">
+        <input
+          id="input-url"
+          class="field url"
+          type="text"
+          placeholder="WebDAV 地址，例如 https://dav.example.com/dav/ 或 127.0.0.1:8899"
+          spellcheck="false"
+          data-testid="input-url"
+        />
+        <input id="input-user" class="field user" type="text" placeholder="用户名" spellcheck="false" />
+        <input id="input-pass" class="field pass" type="password" placeholder="密码" />
+        <select id="input-auth" class="field auth" title="认证方式">
+          <option value="auto">自动认证</option>
+          <option value="basic">Basic</option>
+          <option value="digest">Digest</option>
+          <option value="none">匿名 / 无认证</option>
+        </select>
+        <button type="submit" class="btn primary" id="btn-connect" data-testid="btn-connect">连接</button>
+        <button type="button" class="btn" id="btn-save">保存</button>
+      </form>
+    </header>
+
+    <div class="layout">
+      <aside class="sidebar">
+        <section class="panel">
+          <h2 class="panel-title">已保存的连接</h2>
+          <ul id="connection-list" class="list"></ul>
+        </section>
+
+        <section class="panel">
+          <h2 class="panel-title">服务器能力（OPTIONS）</h2>
+          <div id="server-info" class="server-info muted">尚未连接</div>
+        </section>
+
+        <section class="panel grow">
+          <h2 class="panel-title">
+            原始报文日志
+            <button type="button" class="mini" id="btn-clear-log">清空</button>
+          </h2>
+          <ul id="log-list" class="list log"></ul>
+        </section>
+      </aside>
+
+      <main class="main">
+        <div class="pathbar">
+          <button type="button" class="btn" id="btn-up" title="回到上一级">⬆ 上一级</button>
+          <button type="button" class="btn" id="btn-refresh" title="重新发送 PROPFIND">🔄 刷新</button>
+          <nav id="breadcrumb" class="breadcrumb" data-testid="breadcrumb"></nav>
+          <input id="filter" class="field filter" type="search" placeholder="过滤当前列表…" />
+        </div>
+
+        <div class="toolbar">
+          <button type="button" class="btn" id="btn-mkcol" data-testid="btn-mkcol">📁 新建文件夹</button>
+          <button type="button" class="btn" id="btn-upload" data-testid="btn-upload">⬆ 上传文件</button>
+          <button type="button" class="btn" id="btn-upload-dir">📂 上传文件夹</button>
+          <button type="button" class="btn" id="btn-download-selected">⬇ 下载选中</button>
+          <button type="button" class="btn" id="btn-select-all">☑ 全选</button>
+          <button type="button" class="btn danger" id="btn-delete-selected" data-testid="btn-delete-selected">
+            🗑 删除选中
+          </button>
+          <button type="button" class="btn" id="btn-raw-xml" title="查看当前目录 PROPFIND 返回的原始 XML">
+            📄 原始 XML
+          </button>
+          <button type="button" class="btn" id="btn-diagnose" data-testid="btn-diagnose" title="检查权限与连通性">
+            🔍 诊断
+          </button>
+          <span id="selection-info" class="selection-info muted"></span>
+          <input type="file" id="file-input" multiple hidden />
+          <input type="file" id="dir-input" webkitdirectory hidden />
+        </div>
+
+        <div id="permission-banner" class="banner hidden" data-testid="permission-banner" role="alert">
+          <div class="banner-text">
+            <strong>浏览器没有把「访问网站」权限授予本扩展，请求会被 CORS 拦下</strong>
+            <span id="permission-detail"></span>
+          </div>
+          <div class="banner-actions">
+            <button type="button" class="btn primary" id="btn-grant">申请访问权限</button>
+            <button type="button" class="btn" id="btn-retry-connect">重试连接</button>
+            <button type="button" class="btn ghost" id="btn-permission-help">怎么办？</button>
+          </div>
+        </div>
+
+        <div id="status" class="status" data-testid="status"></div>
+
+        <div id="queue" class="queue"></div>
+
+        <div id="dropzone" class="dropzone">
+          <span>把文件拖到此处上传到当前目录</span>
+        </div>
+
+        <div class="table-wrap">
+          <table id="file-table">
+            <thead>
+              <tr>
+                <th class="col-check"><input type="checkbox" id="check-all" title="全选 / 取消全选" /></th>
+                <th class="sortable" data-sort="name">名称</th>
+                <th class="sortable col-size" data-sort="size">大小</th>
+                <th class="sortable col-time" data-sort="lastModified">修改时间</th>
+                <th class="sortable col-kind" data-sort="kind">类型</th>
+                <th class="col-actions">操作</th>
+              </tr>
+            </thead>
+            <tbody id="file-tbody" data-testid="file-tbody"></tbody>
+          </table>
+          <div id="empty-hint" class="empty">
+            尚未连接。填入 WebDAV 服务器地址后点击「连接」，扩展会直接读取服务器的原始响应并渲染成文件列表。
+          </div>
+        </div>
+
+        <footer class="statusbar">
+          <span id="status-left">就绪</span>
+          <span id="status-right"></span>
+        </footer>
+      </main>
+    </div>
+
+    <!-- 原始报文查看器 -->
+    <dialog id="raw-dialog" class="dialog raw-dialog">
+      <header class="dialog-head">
+        <div>
+          <span id="raw-method" class="method-badge"></span>
+          <span id="raw-status" class="status-badge"></span>
+          <span id="raw-url" class="raw-url"></span>
+        </div>
+        <button type="button" class="btn ghost" id="raw-close">关闭</button>
+      </header>
+      <nav class="tabs" id="raw-tabs">
+        <button type="button" class="tab active" data-tab="request">原始请求</button>
+        <button type="button" class="tab" data-tab="response">原始响应</button>
+        <button type="button" class="tab" data-tab="body">响应正文</button>
+        <button type="button" class="tab" data-tab="parsed">解析结果</button>
+      </nav>
+      <pre id="raw-pre" class="raw-pre" data-testid="raw-pre"></pre>
+      <footer class="dialog-foot">
+        <span id="raw-meta" class="muted"></span>
+        <button type="button" class="btn" id="raw-copy">复制当前内容</button>
+      </footer>
+    </dialog>
+
+    <!-- 通用输入弹窗（新建文件夹、重命名、移动…） -->
+    <dialog id="prompt-dialog" class="dialog prompt-dialog">
+      <form method="dialog">
+        <h3 id="prompt-title">请输入</h3>
+        <p id="prompt-desc" class="muted"></p>
+        <input id="prompt-input" class="field" type="text" />
+        <div class="dialog-actions">
+          <button type="button" class="btn ghost" id="prompt-cancel">取消</button>
+          <button type="button" class="btn primary" id="prompt-ok" data-testid="prompt-ok">确定</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- 文件预览 -->
+    <dialog id="preview-dialog" class="dialog preview-dialog">
+      <header class="dialog-head">
+        <span id="preview-title"></span>
+        <button type="button" class="btn ghost" id="preview-close">关闭</button>
+      </header>
+      <div id="preview-body" class="preview-body"></div>
+    </dialog>
+
+    <div id="toast" class="toast" data-testid="toast"></div>
+
+    <script type="module" src="manager.js"></script>
+  </body>
+</html>

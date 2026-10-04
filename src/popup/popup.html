@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>WebDAV 文件管理器</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header>
+      <span class="icon">🗄️</span>
+      <div>
+        <div class="title">WebDAV 文件管理器</div>
+        <div class="subtitle">读取原始报文并渲染成可操作的文件列表</div>
+      </div>
+    </header>
+
+    <form id="form">
+      <label class="row">
+        <span>服务器</span>
+        <input id="url" type="text" placeholder="https://dav.example.com/dav/" spellcheck="false" />
+      </label>
+      <label class="row">
+        <span>用户名</span>
+        <input id="username" type="text" spellcheck="false" placeholder="可留空（匿名）" />
+      </label>
+      <label class="row">
+        <span>密码</span>
+        <input id="password" type="password" placeholder="可留空" />
+      </label>
+      <label class="row">
+        <span>认证</span>
+        <select id="authMode">
+          <option value="auto">自动</option>
+          <option value="basic">Basic</option>
+          <option value="digest">Digest</option>
+          <option value="none">匿名</option>
+        </select>
+      </label>
+      <div class="actions">
+        <button type="submit" class="primary" id="open">打开文件管理器</button>
+        <button type="button" id="save">保存</button>
+      </div>
+    </form>
+
+    <section>
+      <h2>已保存的连接</h2>
+      <ul id="connections"></ul>
+    </section>
+
+    <footer>
+      提示：在浏览器里打开一个返回 207 Multi-Status XML 的地址时，页面右下角会出现快捷入口。
+    </footer>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

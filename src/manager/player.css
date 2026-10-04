@@ -1,0 +1,345 @@
+/* 音频播放器 / MIDI 播放器组件样式（供预览弹窗使用） */
+
+.player {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  text-align: left;
+  color: var(--text);
+}
+
+/* ---------- 头部：封面 + 元数据 + 频谱 ---------- */
+
+.player-head {
+  display: grid;
+  grid-template-columns: 96px 1fr 260px;
+  gap: 14px;
+  align-items: center;
+}
+
+.player-cover {
+  width: 96px;
+  height: 96px;
+  border-radius: 10px;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  font-size: 28px;
+  flex: 0 0 auto;
+}
+
+.player-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.player-meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.player-title {
+  font-size: 15px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.player-sub {
+  font-size: 12px;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.player-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.player-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-family: var(--mono);
+}
+
+.player-visualizer {
+  width: 100%;
+  height: 72px;
+  border-radius: 8px;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+}
+
+/* ---------- 走带 ---------- */
+
+.player-transport {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.btn.icon {
+  min-width: 34px;
+  padding: 4px 8px;
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.btn.icon.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.player-seek {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 220px;
+}
+
+.player-seek input[type='range'] {
+  flex: 1;
+  min-width: 0;
+}
+
+.player-time {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+/* ---------- 控制条 ---------- */
+
+.player-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.player-controls input[type='range'] {
+  width: 110px;
+}
+
+.player-field {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.player-field select {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 6px;
+  font: inherit;
+}
+
+.player-field input[type='range'] {
+  width: 90px;
+}
+
+.player-gain {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-soft);
+}
+
+.player-gain.limited {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+
+/* ---------- 折叠面板 ---------- */
+
+.player-panel {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-soft);
+  overflow: hidden;
+}
+
+.player-panel > summary {
+  cursor: pointer;
+  padding: 6px 10px;
+  font-size: 12px;
+  user-select: none;
+}
+
+.player-midi,
+.player-tags {
+  padding: 4px 10px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.player-midi-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.player-midi-row label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-dim);
+}
+
+.player-midi-row select {
+  max-width: 220px;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 6px;
+  font: inherit;
+}
+
+.player-midi-row select:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.player-midi-row .check {
+  gap: 6px;
+}
+
+.player-midi-row .check.disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.player-midi-row .check input[type='checkbox'] {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.player-midi-row .check.disabled input[type='checkbox'] {
+  cursor: not-allowed;
+}
+
+.player-midi-status {
+  font-size: 11px;
+}
+
+.player-midi-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.player-bind {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.player-bind:hover {
+  border-color: var(--accent);
+}
+
+.player-bind.learning {
+  border-color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 15%, transparent);
+}
+
+.player-bind-key {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--accent);
+}
+
+.player-bind-label {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.player-midi-monitor {
+  font-family: var(--mono);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.player-tag-row {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: 8px;
+  padding: 2px 0;
+  border-bottom: 1px dashed var(--border);
+  font-size: 12px;
+}
+
+.player-tag-row > span:first-child {
+  color: var(--text-dim);
+}
+
+.player-tag-row > span:last-child {
+  word-break: break-word;
+}
+
+.player-tag-sep {
+  margin-top: 6px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+}
+
+/* 预览弹窗里的播放器要占满宽度 */
+.preview-dialog .preview-body {
+  align-items: stretch;
+  justify-content: flex-start;
+}
+
+@media (max-width: 900px) {
+  .player-head {
+    grid-template-columns: 72px 1fr;
+  }
+
+  .player-visualizer {
+    grid-column: 1 / -1;
+  }
+}

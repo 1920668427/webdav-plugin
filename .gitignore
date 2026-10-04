@@ -1,0 +1,47 @@
+# 测试产物与临时文件
+.tmp/
+node_modules/
+
+# 本地备份（tar.gz 快照）
+backups/
+
+# 日志
+*.log
+
+# ---------------------------------------------------------------
+# macOS 资源文件
+# Finder 走到哪都留 .DS_Store；在 exFAT / U 盘 / 网络卷上（以及 macOS 的
+# tar 打包解包）还会多出 AppleDouble（._ 开头）与 __MACOSX/；
+# 后面几个是系统在各卷上生成的目录。
+# 注：自定义文件夹图标的文件名是「Icon + 回车」，gitignore 写不出结尾的回车
+# （写进去会被当成行尾吃掉），裸写 Icon 规则又容易误伤，所以这里不收。
+# ---------------------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+.AppleDouble
+.LSOverride
+.Spotlight-V100
+.Trashes
+.fseventsd
+.TemporaryItems
+.DocumentRevisions-V100
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+__MACOSX/
+
+# 放在仓库根目录的本地示例媒体：只当测试样本用，不入库。
+# 测试在文件缺失时会自动跳过（见 README 的「真实文件」一节）。
+/*.mp3
+/*.flac
+/*.m4a
+/*.aac
+/*.ogg
+/*.opus
+/*.wav
+/*.mid
+/*.midi
+/*.kar
+
+# 会话导出（DSH 导出的对话记录，不是项目源码）
+/dsh-tui-export-*.md
