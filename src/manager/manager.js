@@ -1661,6 +1661,11 @@ async function previewEntry(entry) {
     return openMediaPreview(entry);
   }
 
+  // 视频不下载：直接把链接交给浏览器，让它自己边下边播（见 openVideoPreview）
+  if (kind === 'video') {
+    return openVideoPreview(entry);
+  }
+
   if (!canPreview(kind)) {
     return toast(`${kindLabel(kind)}暂不支持预览，请下载后查看`, 'error');
   }
@@ -1694,10 +1699,6 @@ async function previewEntry(entry) {
     if (kind === 'image') {
       node = document.createElement('img');
       node.src = url;
-    } else if (kind === 'video') {
-      node = document.createElement('video');
-      node.src = url;
-      node.controls = true;
     } else if (kind === 'audio') {
       node = document.createElement('audio');
       node.src = url;
@@ -1710,6 +1711,135 @@ async function previewEntry(entry) {
     dom.previewDialog.addEventListener('close', () => URL.revokeObjectURL(url), { once: true });
   }
   if (!dom.previewDialog.open) dom.previewDialog.showModal();
+}
+
+/* ------------------------------------------------------------------ */
+/* 视频预览                                                            */
+/* ------------------------------------------------------------------ */
+
+const MEDIA_ERROR_TEXT = {
+  1: '加载被中断',
+  2: '网络中断',
+  3: '解码失败（这个编码浏览器不支持）',
+  4: '浏览器读不了这个地址，或不支持这个容器格式',
+};
+
+/**
+ * 视频预览：不下载，直接把 WebDAV 链接交给浏览器。
+ *
+ * `<video src="https://…/movie.mp4">` 会让浏览器自己发 Range 请求边下边播：
+ * 可以拖动进度条、不必把整个文件读进内存，几百 MB 的电影也点得开。
+ * 老实现是把整个文件 base64 传回来再拼 blob 地址，超过 64MB 直接预览失败，
+ * 拖进度条也只是在内存里找位置。
+ *
+ * 例外是认证：媒体元素不会带上我们算出来的 Authorization 头，所以先用一个
+ * **匿名**请求探一下这台服务器认不认，见 canBrowserReadDirectly()。
+ */
+async function openVideoPreview(entry) {
+  dom.previewTitle.textContent = `${entry.name} · ${formatBytes(entry.size)}`;
+  dom.previewBody.innerHTML = '<div class="player-loading muted">正在准备视频…</div>';
+  if (!dom.previewDialog.open) dom.previewDialog.showModal();
+
+  if (!(await canBrowserReadDirectly(entry))) {
+    return downloadVideoIntoDialog(entry, '这台服务器需要认证，媒体元素带不上 Authorization 头');
+  }
+
+  const node = mountVideoNode(entry.url);
+  node.preload = 'metadata';
+
+  // 关掉弹窗就停掉，否则视频会在后台继续放
+  dom.previewDialog.addEventListener('close', () => stopVideoNode(node), { once: true });
+  node.addEventListener('error', () => handleDirectVideoError(entry, node), { once: true });
+
+  setStatus(`视频交给浏览器直读：${entry.url}`, 'ok');
+}
+
+/**
+ * 浏览器能不能自己去拿这个视频？
+ *
+ * 媒体元素发请求时不会经过我们的 Service Worker，也就带不上 Authorization 头，
+ * 所以这里用一个**不带认证**的 1 字节 Range 请求探一下：
+ *   - 匿名就能读（200/206）→ 交给 `<video>` 直读，Range、缓冲、拖动都归浏览器管；
+ *   - 401 / 403 → 必须认证，别让 `<video>` 去撞墙（Chrome 会卡在认证那里不返回），
+ *     直接走整块下载；
+ *   - 其它情况（404、网络抖动）→ 让浏览器自己去试，失败了还有 handleDirectVideoError 兜底。
+ */
+async function canBrowserReadDirectly(entry) {
+  const probe = await request({
+    method: 'GET',
+    url: entry.url,
+    headers: { Range: 'bytes=0-0' },
+    auth: { mode: 'none' },
+    maxBytes: 1024,
+    timeoutMs: 15000,
+  });
+  if (probe.status === 401 || probe.status === 403) return false;
+  if (probe.status >= 200 && probe.status < 300) return true;
+  return true;
+}
+
+function mountVideoNode(src) {
+  dom.previewBody.innerHTML = '';
+  const node = document.createElement('video');
+  node.controls = true;
+  node.playsInline = true;
+  node.dataset.testid = 'preview-video';
+  node.src = src;
+  dom.previewBody.appendChild(node);
+  return node;
+}
+
+function stopVideoNode(node) {
+  try {
+    node.pause();
+    node.removeAttribute('src');
+    node.load(); // 断掉还在进行的 Range 请求
+  } catch {
+    /* 忽略 */
+  }
+}
+
+/**
+ * 浏览器自己拉不到这个视频（探针判断失误时才会走到）。
+ *
+ * 只有「这台服务器本来就要认证」时才值得退回整块下载 —— 那种情况基本就是
+ * 媒体元素没带 Authorization 头。编码 / 容器不支持（MKV、AVI 之类）时
+ * 下载也一样放不出来，白费带宽，不如直接说清楚。
+ */
+async function handleDirectVideoError(entry, node) {
+  const code = node.error?.code ?? 0;
+  const reason = MEDIA_ERROR_TEXT[code] || `错误码 ${code}`;
+  const authMightBlock = state.auth.mode !== 'none' && Boolean(state.auth.username);
+
+  if (!authMightBlock || code === 3) {
+    setStatus(`视频无法直接播放：${reason}`, 'error');
+    return;
+  }
+
+  setStatus(`浏览器直读失败（${reason}），改为整块下载 …`);
+  await downloadVideoIntoDialog(entry, reason);
+}
+
+/** 退回老路：分块下载整个文件再交给播放器（认证服务器上的兜底） */
+async function downloadVideoIntoDialog(entry, why) {
+  try {
+    const blob = await fetchFileAsBlob(entry.url, {
+      onProgress: (got, total) => setStatus(`正在下载 ${entry.name} … ${formatBytes(got)}${total ? ` / ${formatBytes(total)}` : ''}`),
+    });
+    const url = URL.createObjectURL(blob);
+    const node = mountVideoNode(url);
+    dom.previewDialog.addEventListener(
+      'close',
+      () => {
+        stopVideoNode(node);
+        URL.revokeObjectURL(url);
+      },
+      { once: true },
+    );
+    setStatus(`已改为整块下载后播放（${formatBytes(blob.size)}）：${why}`, 'ok');
+  } catch (err) {
+    setStatus(`预览失败：${err.message}`, 'error');
+  }
 }
 
 dom.previewClose.addEventListener('click', () => dom.previewDialog.close());

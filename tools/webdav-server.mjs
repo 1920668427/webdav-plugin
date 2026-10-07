@@ -195,6 +195,8 @@ export async function startServer(options = {}) {
   }
 
   let nonce = randomBytes(12).toString('hex');
+  // 请求流水，测试里用来断言「浏览器自己发了 Range 请求」这类行为
+  const requests = [];
 
   const server = http.createServer(async (req, res) => {
     const started = Date.now();
@@ -213,6 +215,7 @@ export async function startServer(options = {}) {
     const method = req.method.toUpperCase();
 
     const log = (status) => {
+      requests.push({ method, uri, status, range: req.headers.range || null });
       if (!config.quiet) {
         console.log(`[dav ${new Date().toISOString()}] ${method} ${uri} → ${status} (${Date.now() - started}ms)`);
       }
@@ -535,6 +538,7 @@ export async function startServer(options = {}) {
     port: address.port,
     baseUrl,
     server,
+    requests,
     close: () => new Promise((resolve) => server.close(resolve)),
   };
 }

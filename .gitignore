@@ -42,6 +42,12 @@ __MACOSX/
 /*.mid
 /*.midi
 /*.kar
+/*.mp4
+/*.m4v
+/*.mov
+/*.mkv
+/*.avi
+/*.webm
 
 # 会话导出（DSH 导出的对话记录，不是项目源码）
 /dsh-tui-export-*.md

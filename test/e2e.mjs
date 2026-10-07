@@ -10,7 +10,7 @@
  */
 
 import { spawn } from 'node:child_process';
-import { mkdirSync, rmSync, existsSync, openSync, readFileSync, readdirSync } from 'node:fs';
+import { mkdirSync, rmSync, existsSync, openSync, readFileSync, readdirSync, writeFileSync, copyFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -187,6 +187,25 @@ async function main() {
     console.log(`  ${name.padEnd(10)} ${server.baseUrl}`);
   }
 
+  // 视频预览的样本。
+  // 「直读测试.mp4」是个假文件：只为断言「链接被直接交给浏览器、并且浏览器自己发了
+  // Range 请求」，解不出来无所谓；工作区里如果有真实视频样本就一起放进去，
+  // 用来验证真的能播、能拖（没有就跳过那几条）。
+  const sampleVideo = resolve(projectRoot, '示例视频.mp4');
+  const fakeMp4 = Buffer.concat([
+    Buffer.from([0x00, 0x00, 0x00, 0x18]),
+    Buffer.from('ftypmp42'),
+    Buffer.from([0x00, 0x00, 0x00, 0x00]),
+    Buffer.from('mp42isom'),
+    Buffer.alloc(64 * 1024, 0x21),
+  ]);
+  for (const server of Object.values(servers)) {
+    writeFileSync(resolve(server.config.root, '直读测试.mp4'), fakeMp4);
+  }
+  if (existsSync(sampleVideo)) {
+    copyFileSync(sampleVideo, resolve(servers.anonymous.config.root, '示例视频.mp4'));
+  }
+
   // 端口被占通常是上一次跑挂了留下的孤儿进程，先清干净
   try {
     const existing = await httpJson(`${BROWSER_URL}/json/version`);
@@ -241,6 +260,78 @@ async function main() {
     '未打开的弹窗 display 计算值是 none',
     [idleDialogs.raw, idleDialogs.preview, idleDialogs.prompt].every((d) => d.display === 'none'),
   );
+
+  /* ---------------- 视频预览：链接直读 ---------------- */
+
+  section('视频预览：把链接交给浏览器，不再下载成 blob');
+  const directVideo = await anonymousPage.cdp.evaluate(`(async () => {
+    const row = [...document.querySelectorAll('#file-tbody tr')].find((tr) => tr.textContent.includes('直读测试.mp4'));
+    if (!row) return { error: '列表里没有直读测试.mp4：' + window.__webdav.state.entries.map((e) => e.name).join(',') };
+    row.querySelector('.name-link').click();
+    for (let i = 0; i < 60; i++) {
+      const video = document.querySelector('[data-testid="preview-video"]');
+      if (video) {
+        return {
+          src: String(video.currentSrc || video.src),
+          isBlob: String(video.src).startsWith('blob:'),
+          status: document.querySelector('#status').textContent,
+        };
+      }
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    return { error: '没有出现 video 元素' };
+  })()`);
+  const expectedVideoUrl = `${servers.anonymous.baseUrl}${encodeURIComponent('直读测试.mp4')}`;
+  check(
+    '视频元素直接指向 WebDAV 链接（不是 blob:）',
+    directVideo.src === expectedVideoUrl && directVideo.isBlob === false,
+    `${directVideo.src}（期望 ${expectedVideoUrl}）`,
+  );
+
+  // 媒体请求是异步的，等一会儿再看服务器流水
+  let videoRequests = [];
+  for (let i = 0; i < 60; i++) {
+    videoRequests = servers.anonymous.requests.filter((r) => r.uri.includes('直读测试.mp4'));
+    if (videoRequests.some((r) => /^bytes=/.test(r.range || ''))) break;
+    await sleep(100);
+  }
+  check(
+    '浏览器自己向服务器发了 Range 请求（边下边播）',
+    videoRequests.some((r) => /^bytes=/.test(r.range || '')),
+    JSON.stringify(videoRequests.slice(0, 3)),
+  );
+
+  // 真实视频样本在的话，再确认浏览器真能解出来并拖动
+  const realVideo = await anonymousPage.cdp.evaluate(`(async () => {
+    const row = [...document.querySelectorAll('#file-tbody tr')].find((tr) => tr.textContent.includes('示例视频.mp4'));
+    if (!row) return { error: '工作区里没有示例视频.mp4（跳过）' };
+    document.querySelector('#preview-close').click();
+    await new Promise((r) => setTimeout(r, 200));
+    const fresh = [...document.querySelectorAll('#file-tbody tr')].find((tr) => tr.textContent.includes('示例视频.mp4'));
+    fresh.querySelector('.name-link').click();
+    let video = null;
+    for (let i = 0; i < 100; i++) {
+      video = document.querySelector('[data-testid="preview-video"]');
+      if (video && video.readyState >= 1 && Number.isFinite(video.duration)) break;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    if (!video) return { error: '没有出现 video 元素' };
+    const duration = video.duration;
+    video.currentTime = duration / 2;
+    for (let i = 0; i < 40 && video.seeking; i++) await new Promise((r) => setTimeout(r, 100));
+    const after = video.currentTime;
+    const src = String(video.currentSrc || video.src);
+    document.querySelector('#preview-close').click();
+    return { duration, width: video.videoWidth, height: video.videoHeight, after, src };
+  })()`);
+  if (realVideo.error) {
+    check('真实视频样本（工作区里没有则跳过）', true, realVideo.error);
+  } else {
+    check('真实视频：浏览器直接读出元数据（时长 / 分辨率）', Math.round(realVideo.duration) === 20 && realVideo.width === 640, JSON.stringify(realVideo));
+    check('真实视频：能拖到中间（走 Range 定位）', Math.abs(realVideo.after - realVideo.duration / 2) < 1, `currentTime=${realVideo.after}`);
+    check('真实视频：同样没有经过 blob', realVideo.src === `${servers.anonymous.baseUrl}${encodeURIComponent('示例视频.mp4')}`, realVideo.src);
+  }
+  await anonymousPage.cdp.evaluate(`document.querySelector('#preview-close')?.click()`);
 
   /* ---------------- 2. Basic 认证 ---------------- */
 
@@ -519,6 +610,31 @@ async function main() {
   check('诊断报告的标签页是 报告/请求/响应', diagnoseReport.tabs.join('|').includes('诊断报告'), diagnoseReport.tabs.join(' | '));
 
   check('页面运行期间没有 JS 异常', page.consoleErrors.length === 0, page.consoleErrors.slice(0, 3).join(' ;; '));
+
+  // Basic / Digest 服务器上媒体元素不会带 Authorization 头，浏览器自己拉不到，
+  // 这时要自动退回整块下载，别让认证服务器上的视频彻底打不开
+  section('视频预览：需要认证的服务器自动退回下载');
+  const authVideo = await page.cdp.evaluate(`(async () => {
+    await window.__webdav.navigate(window.__webdav.state.baseUrl);
+    const row = [...document.querySelectorAll('#file-tbody tr')].find((tr) => tr.textContent.includes('直读测试.mp4'));
+    if (!row) return { error: '列表里没有直读测试.mp4：' + window.__webdav.state.entries.map((e) => e.name).join(',') };
+    row.querySelector('.name-link').click();
+    for (let i = 0; i < 120; i++) {
+      const video = document.querySelector('[data-testid="preview-video"]');
+      if (video && String(video.src).startsWith('blob:')) {
+        return { src: String(video.src), status: document.querySelector('#status').textContent };
+      }
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    const video = document.querySelector('[data-testid="preview-video"]');
+    return { src: video ? String(video.src) : null, status: document.querySelector('#status').textContent };
+  })()`);
+  check(
+    'Basic 认证下浏览器拉不到，自动退回整块下载（blob:）',
+    String(authVideo.src).startsWith('blob:'),
+    `${authVideo.src} / ${authVideo.status}`,
+  );
+  await page.cdp.evaluate(`document.querySelector('#preview-close').click()`);
 
   /* ---------------- 3. Digest 认证 ---------------- */
 

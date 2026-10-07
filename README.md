@@ -29,6 +29,7 @@
 | **自动识别 207 页面** | 直接在浏览器里打开一个返回 207 XML 的地址时，右下角会浮出「用文件管理器打开」入口 |
 | **权限自检与诊断** | 连接前检查 host 权限是否真的生效，缺失时给出黄色提示条 +「申请访问权限」按钮；工具栏「🔍 诊断」一键输出权限 / 连通性 / 认证 / 服务器能力报告 |
 | **音频播放器** | 预览音频时用自研的 Web Audio 播放器：封面、实时频谱、进度条、音量、变速、循环、快捷键，播放列表前后切换 |
+| **视频直接交给浏览器** | 视频预览不下载，把 WebDAV 链接直接塞给 `<video src>`：Range 请求、缓冲、拖进度条全归浏览器管，几百 MB 也点得开；只有需要认证的服务器才退回分块下载 |
 | **封面与标签解析** | 自研 ID3v2.2/2.3/2.4、FLAC、Ogg/Opus、MP4/M4A、WAV 解析，读出内嵌封面（含 4000×4000 大图）、GBK/Shift-JIS 老标签与全部原始字段 |
 | **ReplayGain** | 支持 TXXX / RVA2 / Vorbis comment / MP4 自由字段 / Opus R128 五种来源，直接作用在 Web Audio 增益节点上（音轨/专辑/关闭 + 预增益 + 峰值防削波） |
 | **Web MIDI** | MIDI 键盘直接操作播放器（走带/音量/速度/定位），支持 MIDI Learn 改键；播放时向输出设备发 Start/Stop/Continue 与 MIDI 时钟，同步外部硬件。权限**按需申请**：只有展开 MIDI 面板或点「启用 Web MIDI」等明确操作时才请求，不会因为打开一个文件就弹权限框 |
@@ -346,6 +347,32 @@ GET Range: bytes=8388608-...    → 206, 8 MB
 顺带一句：媒体错误码也翻译成人话了 —— `2` 是「读取中断（数据没传完）」，
 `3` 才是「解码失败」，`4` 是「格式不受支持」，不再一律甩一句「可能是格式不支持」。
 
+### 视频：不下载，把链接直接交给浏览器
+
+视频走的是另一条路 —— **根本不下载**，直接把 WebDAV 地址塞给 `<video>`：
+
+```js
+video.src = entry.url;        // 不是 blob:
+```
+
+于是 Range 请求、缓冲、拖动进度条、解码全归浏览器管：几百 MB 的电影点开就能播，
+拖进度条是真的去服务器要那一段，也不用先把整个文件读进内存。
+老实现是 `GET` 整块 + base64 传回来再拼 blob，超过 64 MB 直接预览失败。
+
+唯一的例外是**认证**：`manager.js` 里所有请求都由 Service Worker 手工加
+`Authorization` 头，而媒体元素发请求时根本不经过我们，所以它带不上凭据。
+因此打开视频前先用一个**匿名**的 1 字节 Range 请求探一下（`canBrowserReadDirectly()`）：
+
+| 探针结果 | 处理 |
+| --- | --- |
+| `200` / `206` | 匿名可读 → 交给 `<video>` 直读 |
+| `401` / `403` | 必须认证 → 不让 `<video>` 去撞墙（Chrome 会卡在认证上不返回），直接走 [blob-fetch.js](src/lib/blob-fetch.js) 分块下载，状态栏写明原因 |
+| 其它（404 / 网络抖动） | 让浏览器自己试，真失败了再由 `error` 兜底 |
+
+多花一个 1 字节请求，换来「能流式就一定流式，不能流式就别干等」：
+匿名服务器上永远直读，Basic / Digest 服务器上立刻转下载，不会先卡几秒再回退。
+解码失败（错误码 3）不做回退 —— 格式不支持时再下载一遍纯粹是浪费带宽。
+
 ---
 
 ## 6. 安装后请留意
@@ -411,7 +438,7 @@ webdav-plugin/
     ├── media.test.mjs            # 48 项媒体测试（标签/封面/ReplayGain/音频后端/MIDI/SMF/曲名编码）
     ├── blob-fetch.test.mjs       # 11 项分块下载测试（含「>8MB 被截断」回归）
     ├── fixtures.mjs              # 手工构造的音频与 MIDI 夹具
-    ├── e2e.mjs                   # 124 项端到端测试（真实 Edge + CDP）
+    ├── e2e.mjs                   # 130 项端到端测试（真实 Edge + CDP）
     └── cdp.mjs                   # 零依赖 CDP 客户端
 ```
 
@@ -423,7 +450,7 @@ webdav-plugin/
 npm run check        # 静态检查：清单、语法、DOM id、弹窗 CSS、PNG、调试残留
 npm run test:unit    # 85 项单元测试（通用 + 媒体 + 音频后端集成 + 分块下载）
 npm run test:media   # 只跑媒体相关的 48 项
-npm run test:e2e     # 124 项端到端：headless Edge 加载扩展，跑完整流程
+npm run test:e2e     # 130 项端到端：headless Edge 加载扩展，跑完整流程
 npm test             # 上面按顺序执行
 npm run icons        # 重新生成图标
 node tools/vendor-webaudiokit.mjs   # 重新取回 WebAudioKit 副本（校验 SHA-256）
